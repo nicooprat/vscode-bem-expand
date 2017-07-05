@@ -44,7 +44,18 @@
                 "key": "tab",
                 "when": "config.emmet.triggerExpansionOnTab && editorTextFocus && !editorHasMultipleSelections && !editorHasSelection && !editorReadonly && !editorTabMovesFocus && !suggestWidgetVisible"
             }
-        ]
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "BEM expand configuration",
+            "properties": {
+                "bemExpand.findClosestTag": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Find closest/nearest class name. By default the first class name is used."
+                }
+            }
+        }
     },
     "scripts": {
         "vscode:prepublish": "tsc -p ./",

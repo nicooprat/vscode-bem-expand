@@ -5,55 +5,98 @@ import * as assert from 'assert';
 
 import * as vscode from 'vscode';
 
-import { findClass, checkTree } from '../src/find-class';
+import { findClass } from '../src/find-class';
+import { TreeParser } from '../src/tree-parser';
+import { overrideFindClosest } from '../src/expand';
 import * as bemExpand from '../src/extension';
 
 suite('Extension Tests', () => {
-    test('findClass', () => {
-        assert.equal(findClass(`  <div class="l-foo l-foo--special">`), 'l-foo');
-    });
+  test('findClass', () => {
+    assert.equal(findClass(`  <div class="l-foo l-foo--special">`), 'l-foo');
+  });
 
-    test('checkTree', () => {
-        assert.equal(checkTree(`  <div class="l-foo l-foo--special">`, []), true);
-    });
-    test('checkTreeFalse', () => {
-        assert.equal(checkTree(` </div>`, []), false);
-    });
+  test('TreeParser previous line', () => {
+    const treeParser = new TreeParser();
 
-    test('bemExpand', () => {
-        let testFilePath = path.join(os.tmpdir(), 'bem-expand-' + (Math.random() * 100000) + '.html');
+    assert.equal(treeParser.isRoot(`  <div class="l-foo l-foo--special">`), true);
+  });
 
-        fs.writeFileSync(testFilePath, `<div class="l-foo l-foo--special">\n  .&__bar\n</div>`);
+  test('TreeParser ignore self closing', () => {
+    const treeParser = new TreeParser();
 
-        return vscode.workspace.openTextDocument(testFilePath).then((document) => {
-            return vscode.window.showTextDocument(document).then((editor) => {
-                let position = new vscode.Position(1, 9);
+    assert.equal(treeParser.isRoot(`    <img src="foo.jpg" />`), false);
+    assert.equal(treeParser.isRoot(`  <div class="l-foo l-foo--special">`), true);
+  });
 
-                editor.selection = new vscode.Selection(position, position);
+  test('TreeParser ignore open close', () => {
+    const treeParser = new TreeParser();
 
-                return vscode.commands.executeCommand('extension.bemExpand').then(() => {
-                    assert.equal(editor.document.lineAt(1).text, `  <div class="l-foo__bar"></div>`);
-                });
-            });
+    assert.equal(treeParser.isRoot(`  <div class="l-button">Text</div>`), false);
+    assert.equal(treeParser.isRoot(`  <div class="l-foo l-foo--special">`), true);
+  });
+
+  test('TreeParser complex', () => {
+    const treeParser = new TreeParser();
+
+    assert.equal(treeParser.isRoot(`    </div>`), false);
+    assert.equal(treeParser.isRoot(`      </button>`), false);
+    assert.equal(treeParser.isRoot(`        Button`), false);
+    assert.equal(treeParser.isRoot(`      <button class="l-button">`), false);
+    assert.equal(treeParser.isRoot(`    <div class="l-container">`), false);
+    assert.equal(treeParser.isRoot(`  <div class="l-foo l-foo--special">`), true);
+  });
+
+  test('bemExpand', () => {
+    overrideFindClosest(false);
+
+    const testFilePath = path.join(os.tmpdir(), 'bem-expand-' + (Math.random() * 100000) + '.html');
+
+    fs.writeFileSync(testFilePath, `<div class="l-foo l-foo--special">\n  .&__bar\n</div>`);
+
+    return vscode.workspace.openTextDocument(testFilePath).then((document) => {
+      return vscode.window.showTextDocument(document).then((editor) => {
+        const position = new vscode.Position(1, 9);
+
+        editor.selection = new vscode.Selection(position, position);
+
+        return vscode.commands.executeCommand('extension.bemExpand').then(() => {
+          assert.equal(editor.document.lineAt(1).text, `  <div class="l-foo__bar"></div>`);
         });
+      });
     });
-    test('bemExpandMultiline', () => {
-        let testFilePath = path.join(os.tmpdir(), 'bem-expand-' + (Math.random() * 100000) + '.html');
+  });
 
-        fs.writeFileSync(testFilePath, `<div class="l-foo l-foo--special">\n  .&__bar\n</div>`);
-        fs.writeFileSync(testFilePath, `<div class="r-foo">\n    <div class="r-foo__bar"></div>\n` +
-            `    <div class="r-foo__bar">\n        .&--bar\n    </div>\n</div>`);
+  test('bemExpand find closest', () => {
+    overrideFindClosest(true);
 
-        return vscode.workspace.openTextDocument(testFilePath).then((document) => {
-            return vscode.window.showTextDocument(document).then((editor) => {
-                let position = new vscode.Position(3, 15);
+    const testFilePath = path.join(os.tmpdir(), 'bem-expand-' + (Math.random() * 100000) + '.html');
 
-                editor.selection = new vscode.Selection(position, position);
+    fs.writeFileSync(
+      testFilePath,
+      (
+        `<div class="r-foo">\n` +
+        `  <div class="r-foo__bar"></div>\n` +
+        `  <div class="r-foo__bar">\n` +
+        `    <div class="r-foo__baz">\n` +
+        `      Test\n` +
+        `    </div>\n` +
+        `\n` +
+        `    .&--bar\n` +
+        `  </div>\n` +
+        `</div>\n`
+      ),
+    );
 
-                return vscode.commands.executeCommand('extension.bemExpand').then(() => {
-                    assert.equal(editor.document.lineAt(3).text, `        <div class="r-foo__bar--bar"></div>`);
-                });
-            });
+    return vscode.workspace.openTextDocument(testFilePath).then((document) => {
+      return vscode.window.showTextDocument(document).then((editor) => {
+        const position = new vscode.Position(7, 11);
+
+        editor.selection = new vscode.Selection(position, position);
+
+        return vscode.commands.executeCommand('extension.bemExpand').then(() => {
+          assert.equal(editor.document.lineAt(7).text, `    <div class="r-foo__bar--bar"></div>`);
         });
+      });
     });
+  });
 });

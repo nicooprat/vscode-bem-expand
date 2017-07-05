@@ -2,57 +2,88 @@
 
 import * as vscode from 'vscode';
 
-import { findClass, checkTree } from './find-class';
+import { findClass } from './find-class';
+import { TreeParser } from './tree-parser';
 
-declare var obTree: object;
+let findClosestOverride: boolean | undefined;
+
+export function overrideFindClosest(value: boolean) {
+  findClosestOverride = value;
+}
+
+function findFirstClassName(currentLineNumber: number, editor: vscode.TextEditor): string | undefined {
+  for (let i = 0; i < currentLineNumber; i += 1) {
+    const line = editor.document.lineAt(i);
+
+    const className = findClass(line.text);
+
+    if (className !== undefined) {
+      return className;
+    }
+  }
+}
+
+export function findClosestClassName(currentLineNumber: number, editor: vscode.TextEditor): string | undefined {
+  const treeParser = new TreeParser();
+
+  for (let i = currentLineNumber - 1; i >= 0; i -= 1) {
+    const line = editor.document.lineAt(i);
+
+    if (!treeParser.isRoot(line.text)) {
+      continue;
+    }
+
+    const className = findClass(line.text);
+
+    if (className !== undefined) {
+      return className;
+    }
+  }
+}
 
 export function expand() {
-    var obTree = [];
-    let editor = vscode.window.activeTextEditor;
+  const editor = vscode.window.activeTextEditor;
 
-    let langId = editor.document.languageId;
+  const langId = editor.document.languageId;
 
-    if (langId !== 'html' && langId !== 'typescriptreact' && langId != 'javascriptreact') {
-        return;
-    }
+  if (langId !== 'html' && langId !== 'typescriptreact' && langId !== 'javascriptreact') {
+    return;
+  }
 
-    let line = editor.selection.start.line;
+  const currentLineNumber = editor.selection.start.line;
 
-    let range = new vscode.Range(new vscode.Position(line, 0), editor.selection.end);
+  const range = new vscode.Range(new vscode.Position(currentLineNumber, 0), editor.selection.end);
 
-    let text = editor.document.getText(range);
+  const text = editor.document.getText(range);
 
-    if (!/&/.test(text)) {
-        return;
-    }
+  if (!/&/.test(text)) {
+    return;
+  }
 
-    let className: string = null;
+  let findClosest = vscode.workspace.getConfiguration('bemExpand').get('findClosestTag', false);
 
-    for (let i = line; i >= 0; i--) {
-        let line = editor.document.lineAt(i);
+  // for testing
+  if (findClosestOverride !== undefined) {
+    findClosest = findClosestOverride;
+  }
 
-        if (!checkTree(line.text, obTree)) {
-            continue;
-        }
+  const className = findClosest ? (
+    findClosestClassName(currentLineNumber, editor)
+  ) : (
+    findFirstClassName(currentLineNumber, editor)
+  );
 
-        className = findClass(line.text);
+  if (className === undefined) {
+    return;
+  }
 
-        if (className != null) {
-            break;
-        }
-    }
+  const newText = text.replace(/&/g, className);
 
-    if (className == null) {
-        return;
-    }
+  editor.edit((editBuilder) => {
+    editBuilder.replace(range, newText);
+  });
 
-    let newText = text.replace(/&/g, className);
+  const newPosition = new vscode.Position(currentLineNumber, newText.length);
 
-    editor.edit(editBuilder => {
-        editBuilder.replace(range, newText);
-    });
-
-    let newPosition = new vscode.Position(line, newText.length);
-
-    editor.selection = new vscode.Selection(newPosition, newPosition);
+  editor.selection = new vscode.Selection(newPosition, newPosition);
 }
