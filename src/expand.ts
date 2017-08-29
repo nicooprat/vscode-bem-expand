@@ -46,7 +46,7 @@ export function expand() {
 
   const langId = editor.document.languageId;
 
-  if (langId !== 'html' && langId !== 'typescriptreact' && langId !== 'javascriptreact') {
+  if (langId !== 'html' && langId !== 'typescriptreact' && langId !== 'javascriptreact' && langId !== 'php' && langId !== 'blade') {
     return;
   }
 
